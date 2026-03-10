@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, Alert, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { Link } from 'expo-router';
 import { db, initDB } from '../database';
 
@@ -30,24 +30,37 @@ export default function ProgramasScreen() {
     setProgramas(result);
   };
 
-  const guardarPrograma = () => {
-    if (!codigo || !nombre) {
-      Alert.alert('Error', 'Todos los campos son obligatorios');
-      return;
+  const validarCampos = () => {
+    if (!codigo.trim() || !nombre.trim()) {
+      Alert.alert('Error', 'Todos los campos son obligatorios.');
+      return false;
     }
+    if (codigo.length > 4) {
+      Alert.alert('Error', 'El código no puede superar los 4 caracteres.');
+      return false;
+    }
+    if (nombre.length > 30) {
+      Alert.alert('Error', 'El nombre no puede superar los 30 caracteres.');
+      return false;
+    }
+    return true;
+  };
+
+  const guardarPrograma = () => {
+    if (!validarCampos()) return;
+    
     try {
       if (editando) {
-        // Solo actualizamos el nombre como lo solicitaste
-        db.runSync('UPDATE programas SET nombre = ? WHERE codigo = ?', [nombre, codigo]);
+        db.runSync('UPDATE programas SET nombre = ? WHERE codigo = ?', [nombre.trim(), codigo.trim()]);
         setEditando(false);
       } else {
-        db.runSync('INSERT INTO programas (codigo, nombre) VALUES (?, ?)', [codigo, nombre]);
+        db.runSync('INSERT INTO programas (codigo, nombre) VALUES (?, ?)', [codigo.trim(), nombre.trim()]);
       }
       setCodigo('');
       setNombre('');
       cargarProgramas();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar. Revisa que el código no esté duplicado y cumpla el límite.');
+      Alert.alert('Error', 'No se pudo guardar. Revisa que el código no esté duplicado.');
     }
   };
 
@@ -58,7 +71,7 @@ export default function ProgramasScreen() {
   };
 
   const eliminarPrograma = (cod: string) => {
-    Alert.alert('Confirmar', '¿Seguro que deseas eliminar este programa?', [
+    Alert.alert('Confirmar', '¿Seguro que deseas eliminar este programa? Se eliminarán también los estudiantes asociados.', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: () => {
           db.runSync('DELETE FROM programas WHERE codigo = ?', [cod]);
@@ -69,72 +82,233 @@ export default function ProgramasScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Gestión de Programas</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        
+        {/* Navegación a Estudiantes posicionada de forma similar al botón de volver */}
+        <Link href="/estudiantes" asChild>
+          <TouchableOpacity style={styles.botonVolver}>
+            <Text style={styles.textoVolver}>Ir a Estudiantes →</Text>
+          </TouchableOpacity>
+        </Link>
 
-      {/* Navegación a Estudiantes */}
-      <Link href="/estudiantes" asChild>
-        <Button title="Ir a Estudiantes ->" color="#007BFF" />
-      </Link>
+        <Text style={styles.title}>Gestión de Programas</Text>
 
-      <View style={styles.form}>
-        <TextInput
-          style={[styles.input, editando && styles.disabledInput]}
-          placeholder="Código (Ej: P001)"
-          value={codigo}
-          onChangeText={setCodigo}
-          maxLength={4}
-          editable={!editando} // No se puede editar el código si ya existe
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Nombre del Programa"
-          value={nombre}
-          onChangeText={setNombre}
-          maxLength={30}
-        />
-        <Button title={editando ? "Actualizar Nombre" : "Crear Programa"} onPress={guardarPrograma} />
-        {editando && <Button title="Cancelar Edición" color="red" onPress={() => { setEditando(false); setCodigo(''); setNombre(''); }} />}
-      </View>
-
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar por código o nombre..."
-        value={busqueda}
-        onChangeText={(text) => {
-          setBusqueda(text);
-          cargarProgramas(text);
-        }}
-      />
-
-      <FlatList
-        data={programas}
-        keyExtractor={(item) => item.codigo}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: 'bold' }}>[{item.codigo}] {item.nombre}</Text>
-            </View>
-            <TouchableOpacity onPress={() => editarPrograma(item)}>
-              <Text style={styles.actionText}>Editar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => eliminarPrograma(item.codigo)}>
-              <Text style={[styles.actionText, { color: 'red' }]}>Eliminar</Text>
-            </TouchableOpacity>
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Código del Programa</Text>
+            <TextInput 
+              style={[styles.input, editando && styles.disabledInput]} 
+              placeholder="Ej: P005" 
+              value={codigo} 
+              onChangeText={setCodigo} 
+              maxLength={4} 
+              editable={!editando} 
+              autoCapitalize="characters" 
+            />
           </View>
-        )}
-      />
-    </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre del Programa</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder="Ej: Ingeniería de Sistemas" 
+              value={nombre} 
+              onChangeText={setNombre} 
+              maxLength={30} 
+            />
+          </View>
+
+          <View style={styles.botonesContainer}>
+            <TouchableOpacity style={styles.botonPrimario} onPress={guardarPrograma}>
+              <Text style={styles.textoBotonPrimario}>{editando ? "Actualizar Nombre" : "Crear Programa"}</Text>
+            </TouchableOpacity>
+            
+            {editando && (
+              <TouchableOpacity style={styles.botonSecundario} onPress={() => { setEditando(false); setCodigo(''); setNombre(''); }}>
+                <Text style={styles.textoBotonSecundario}>Cancelar Edición</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <TextInput 
+          style={styles.searchInput} 
+          placeholder="Buscar por código o nombre..." 
+          value={busqueda} 
+          onChangeText={(text) => { setBusqueda(text); cargarProgramas(text); }} 
+        />
+
+        <FlatList
+          data={programas}
+          keyExtractor={(item) => item.codigo}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>[{item.codigo}]</Text>
+                <Text style={styles.cardSubtitle}>{item.nombre}</Text>
+              </View>
+              <View style={styles.cardActions}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => editarPrograma(item)}>
+                  <Text style={styles.actionTextEdit}>Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => eliminarPrograma(item.codigo)}>
+                  <Text style={styles.actionTextDelete}>Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
+// ESTILOS UNIFICADOS
+const colores = {
+  rojoPrimario: '#C4142B', 
+  fondoApp: '#FAFAFA',      
+  textoOscuro: '#222222',
+  textoGris: '#555555',
+  bordeGris: '#DCDCDC',
+  blanco: '#FFFFFF',
+  azulInput: '#F0F4F8'      
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f5f5f5' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-  form: { backgroundColor: 'white', padding: 15, borderRadius: 8, marginVertical: 15, gap: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5 },
-  disabledInput: { backgroundColor: '#e0e0e0', color: '#888' },
-  searchInput: { borderWidth: 1, borderColor: '#007BFF', padding: 10, borderRadius: 5, marginBottom: 15, backgroundColor: 'white' },
-  card: { flexDirection: 'row', backgroundColor: 'white', padding: 15, borderRadius: 5, marginBottom: 10, alignItems: 'center', gap: 10 },
-  actionText: { color: '#007BFF', fontWeight: 'bold' }
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: colores.fondoApp, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 
+  },
+  container: { 
+    flex: 1, 
+    padding: 24, 
+    backgroundColor: colores.fondoApp 
+  },
+  botonVolver: {
+    marginBottom: 15,
+    alignSelf: 'flex-end', // Lo alineamos a la derecha para que se sienta como "avanzar"
+  },
+  textoVolver: {
+    color: colores.rojoPrimario,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  title: { 
+    fontSize: 26, 
+    fontWeight: 'bold', 
+    color: colores.textoOscuro,
+    marginBottom: 20, 
+  },
+  form: { 
+    marginBottom: 20, 
+  },
+  inputGroup: {
+    marginBottom: 15,
+  },
+  label: {
+    fontSize: 14,
+    color: colores.textoOscuro,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  input: { 
+    backgroundColor: colores.blanco,
+    borderWidth: 1, 
+    borderColor: colores.bordeGris, 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    borderRadius: 6,
+    fontSize: 16,
+    color: colores.textoOscuro,
+  },
+  disabledInput: { 
+    backgroundColor: colores.azulInput, 
+    color: '#888' 
+  },
+  botonesContainer: {
+    marginTop: 10,
+    gap: 10,
+  },
+  botonPrimario: {
+    backgroundColor: colores.rojoPrimario,
+    paddingVertical: 14,
+    borderRadius: 6,
+    alignItems: 'center',
+    shadowColor: colores.rojoPrimario,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  textoBotonPrimario: {
+    color: colores.blanco,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  botonSecundario: {
+    backgroundColor: 'transparent',
+    paddingVertical: 14,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colores.rojoPrimario,
+  },
+  textoBotonSecundario: {
+    color: colores.rojoPrimario,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  searchInput: { 
+    backgroundColor: colores.blanco,
+    borderWidth: 1, 
+    borderColor: colores.bordeGris, 
+    padding: 12, 
+    borderRadius: 6, 
+    marginBottom: 20,
+    fontSize: 16,
+  },
+  card: { 
+    flexDirection: 'row', 
+    backgroundColor: colores.blanco, 
+    padding: 16, 
+    borderRadius: 8, 
+    marginBottom: 12, 
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: colores.rojoPrimario, 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardTitle: { 
+    fontWeight: 'bold', 
+    fontSize: 16,
+    color: colores.textoOscuro,
+    marginBottom: 2,
+  },
+  cardSubtitle: { 
+    fontSize: 14, 
+    color: colores.textoGris,
+  },
+  cardActions: {
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 5,
+  },
+  actionTextEdit: { 
+    color: colores.textoGris, 
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  actionTextDelete: { 
+    color: colores.rojoPrimario, 
+    fontWeight: 'bold',
+    fontSize: 14,
+  }
 });
