@@ -3,7 +3,9 @@ import { View, Text, TextInput, FlatList, StyleSheet, Alert, TouchableOpacity, S
 import { Link } from 'expo-router';
 import { db, initDB } from '../database';
 
+// Añadimos el tipo Estudiante para poder leerlos de la BD
 type Programa = { codigo: string; nombre: string };
+type Estudiante = { codigo: string; nombre: string; email: string; programa_cod: string };
 
 export default function ProgramasScreen() {
   const [programas, setProgramas] = useState<Programa[]>([]);
@@ -11,6 +13,10 @@ export default function ProgramasScreen() {
   const [nombre, setNombre] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [editando, setEditando] = useState(false);
+
+  // Nuevos estados para la funcionalidad de expandir estudiantes
+  const [programaExpandido, setProgramaExpandido] = useState<string | null>(null);
+  const [estudiantesDelPrograma, setEstudiantesDelPrograma] = useState<Estudiante[]>([]);
 
   useEffect(() => {
     initDB();
@@ -28,6 +34,23 @@ export default function ProgramasScreen() {
       result = db.getAllSync<Programa>('SELECT * FROM programas');
     }
     setProgramas(result);
+  };
+
+  // Función que se ejecuta al tocar un programa
+  const toggleExpandir = (codigoPrograma: string) => {
+    if (programaExpandido === codigoPrograma) {
+      // Si tocamos el que ya está abierto, lo cerramos
+      setProgramaExpandido(null);
+      setEstudiantesDelPrograma([]);
+    } else {
+      // Si tocamos uno nuevo, lo abrimos y buscamos sus estudiantes
+      setProgramaExpandido(codigoPrograma);
+      const result = db.getAllSync<Estudiante>(
+        'SELECT * FROM estudiantes WHERE programa_cod = ?',
+        [codigoPrograma]
+      );
+      setEstudiantesDelPrograma(result);
+    }
   };
 
   const validarCampos = () => {
@@ -75,6 +98,10 @@ export default function ProgramasScreen() {
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: () => {
           db.runSync('DELETE FROM programas WHERE codigo = ?', [cod]);
+          // Si eliminamos el programa que estaba expandido, lo cerramos
+          if (programaExpandido === cod) {
+            setProgramaExpandido(null);
+          }
           cargarProgramas();
         }
       }
@@ -85,7 +112,6 @@ export default function ProgramasScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         
-        {/* Navegación a Estudiantes posicionada de forma similar al botón de volver */}
         <Link href="/estudiantes" asChild>
           <TouchableOpacity style={styles.botonVolver}>
             <Text style={styles.textoVolver}>Ir a Estudiantes →</Text>
@@ -97,26 +123,12 @@ export default function ProgramasScreen() {
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Código del Programa</Text>
-            <TextInput 
-              style={[styles.input, editando && styles.disabledInput]} 
-              placeholder="Ej: P005" 
-              value={codigo} 
-              onChangeText={setCodigo} 
-              maxLength={4} 
-              editable={!editando} 
-              autoCapitalize="characters" 
-            />
+            <TextInput style={[styles.input, editando && styles.disabledInput]} placeholder="Ej: P005" value={codigo} onChangeText={setCodigo} maxLength={4} editable={!editando} autoCapitalize="characters" />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Nombre del Programa</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Ej: Ingeniería de Sistemas" 
-              value={nombre} 
-              onChangeText={setNombre} 
-              maxLength={30} 
-            />
+            <TextInput style={styles.input} placeholder="Ej: Ingeniería de Sistemas" value={nombre} onChangeText={setNombre} maxLength={30} />
           </View>
 
           <View style={styles.botonesContainer}>
@@ -132,30 +144,53 @@ export default function ProgramasScreen() {
           </View>
         </View>
 
-        <TextInput 
-          style={styles.searchInput} 
-          placeholder="Buscar por código o nombre..." 
-          value={busqueda} 
-          onChangeText={(text) => { setBusqueda(text); cargarProgramas(text); }} 
-        />
+        <TextInput style={styles.searchInput} placeholder="Buscar por código o nombre..." value={busqueda} onChangeText={(text) => { setBusqueda(text); cargarProgramas(text); }} />
 
         <FlatList
           data={programas}
           keyExtractor={(item) => item.codigo}
           renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>[{item.codigo}]</Text>
-                <Text style={styles.cardSubtitle}>{item.nombre}</Text>
-              </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => editarPrograma(item)}>
-                  <Text style={styles.actionTextEdit}>Editar</Text>
+            <View style={styles.cardContainer}>
+              {/* Tarjeta principal del programa */}
+              <View style={styles.card}>
+                <TouchableOpacity 
+                  style={{ flex: 1 }} 
+                  onPress={() => toggleExpandir(item.codigo)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.cardTitle}>[{item.codigo}]</Text>
+                  <Text style={styles.cardSubtitle}>{item.nombre}</Text>
+                  {/* Indicador visual de expansión */}
+                  <Text style={styles.textoExpandir}>
+                    {programaExpandido === item.codigo ? 'Ocultar estudiantes ▲' : 'Ver estudiantes ▼'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => eliminarPrograma(item.codigo)}>
-                  <Text style={styles.actionTextDelete}>Eliminar</Text>
-                </TouchableOpacity>
+
+                <View style={styles.cardActions}>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => editarPrograma(item)}>
+                    <Text style={styles.actionTextEdit}>Editar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => eliminarPrograma(item.codigo)}>
+                    <Text style={styles.actionTextDelete}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
+
+              {/* Sección desplegable con la lista de estudiantes */}
+              {programaExpandido === item.codigo && (
+                <View style={styles.estudiantesContainer}>
+                  {estudiantesDelPrograma.length > 0 ? (
+                    estudiantesDelPrograma.map((estudiante) => (
+                      <View key={estudiante.codigo} style={styles.estudianteItem}>
+                        <Text style={styles.estudianteNombre}>• {estudiante.nombre}</Text>
+                        <Text style={styles.estudianteEmail}>{estudiante.email}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.sinEstudiantes}>No hay estudiantes registrados en este programa.</Text>
+                  )}
+                </View>
+              )}
             </View>
           )}
         />
@@ -172,143 +207,81 @@ const colores = {
   textoGris: '#555555',
   bordeGris: '#DCDCDC',
   blanco: '#FFFFFF',
-  azulInput: '#F0F4F8'      
+  azulInput: '#F0F4F8',
+  fondoEstudiantes: '#F9ECEC' // Un fondito rojizo/rosado muy sutil para la sub-lista
 };
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1, 
-    backgroundColor: colores.fondoApp, 
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 
-  },
-  container: { 
-    flex: 1, 
-    padding: 24, 
-    backgroundColor: colores.fondoApp 
-  },
-  botonVolver: {
-    marginBottom: 15,
-    alignSelf: 'flex-end', // Lo alineamos a la derecha para que se sienta como "avanzar"
-  },
-  textoVolver: {
-    color: colores.rojoPrimario,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  title: { 
-    fontSize: 26, 
-    fontWeight: 'bold', 
-    color: colores.textoOscuro,
-    marginBottom: 20, 
-  },
-  form: { 
-    marginBottom: 20, 
-  },
-  inputGroup: {
-    marginBottom: 15,
-  },
-  label: {
-    fontSize: 14,
-    color: colores.textoOscuro,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  input: { 
+  safeArea: { flex: 1, backgroundColor: colores.fondoApp, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+  container: { flex: 1, padding: 24, backgroundColor: colores.fondoApp },
+  botonVolver: { marginBottom: 15, alignSelf: 'flex-end' },
+  textoVolver: { color: colores.rojoPrimario, fontSize: 16, fontWeight: 'bold' },
+  title: { fontSize: 26, fontWeight: 'bold', color: colores.textoOscuro, marginBottom: 20 },
+  form: { marginBottom: 20 },
+  inputGroup: { marginBottom: 15 },
+  label: { fontSize: 14, color: colores.textoOscuro, fontWeight: '600', marginBottom: 6 },
+  input: { backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.bordeGris, paddingHorizontal: 15, paddingVertical: 12, borderRadius: 6, fontSize: 16, color: colores.textoOscuro },
+  disabledInput: { backgroundColor: colores.azulInput, color: '#888' },
+  botonesContainer: { marginTop: 10, gap: 10 },
+  botonPrimario: { backgroundColor: colores.rojoPrimario, paddingVertical: 14, borderRadius: 6, alignItems: 'center', shadowColor: colores.rojoPrimario, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 2 },
+  textoBotonPrimario: { color: colores.blanco, fontSize: 16, fontWeight: 'bold' },
+  botonSecundario: { backgroundColor: 'transparent', paddingVertical: 14, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: colores.rojoPrimario },
+  textoBotonSecundario: { color: colores.rojoPrimario, fontSize: 16, fontWeight: 'bold' },
+  searchInput: { backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.bordeGris, padding: 12, borderRadius: 6, marginBottom: 20, fontSize: 16 },
+  
+  // Estilos actualizados para la tarjeta y la sub-lista
+  cardContainer: {
+    marginBottom: 12,
     backgroundColor: colores.blanco,
-    borderWidth: 1, 
-    borderColor: colores.bordeGris, 
-    paddingHorizontal: 15, 
-    paddingVertical: 12, 
-    borderRadius: 6,
-    fontSize: 16,
-    color: colores.textoOscuro,
-  },
-  disabledInput: { 
-    backgroundColor: colores.azulInput, 
-    color: '#888' 
-  },
-  botonesContainer: {
-    marginTop: 10,
-    gap: 10,
-  },
-  botonPrimario: {
-    backgroundColor: colores.rojoPrimario,
-    paddingVertical: 14,
-    borderRadius: 6,
-    alignItems: 'center',
-    shadowColor: colores.rojoPrimario,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  textoBotonPrimario: {
-    color: colores.blanco,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  botonSecundario: {
-    backgroundColor: 'transparent',
-    paddingVertical: 14,
-    borderRadius: 6,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colores.rojoPrimario,
-  },
-  textoBotonSecundario: {
-    color: colores.rojoPrimario,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  searchInput: { 
-    backgroundColor: colores.blanco,
-    borderWidth: 1, 
-    borderColor: colores.bordeGris, 
-    padding: 12, 
-    borderRadius: 6, 
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  card: { 
-    flexDirection: 'row', 
-    backgroundColor: colores.blanco, 
-    padding: 16, 
-    borderRadius: 8, 
-    marginBottom: 12, 
-    alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: colores.rojoPrimario, 
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  cardTitle: { 
-    fontWeight: 'bold', 
-    fontSize: 16,
-    color: colores.textoOscuro,
-    marginBottom: 2,
+  card: { 
+    flexDirection: 'row', 
+    padding: 16, 
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: colores.rojoPrimario, 
   },
-  cardSubtitle: { 
-    fontSize: 14, 
-    color: colores.textoGris,
+  cardTitle: { fontWeight: 'bold', fontSize: 16, color: colores.textoOscuro, marginBottom: 2 },
+  cardSubtitle: { fontSize: 14, color: colores.textoOscuro },
+  textoExpandir: { fontSize: 12, color: colores.rojoPrimario, marginTop: 8, fontWeight: '600' },
+  cardActions: { justifyContent: 'space-between', gap: 10 },
+  actionButton: { padding: 5 },
+  actionTextEdit: { color: colores.textoGris, fontWeight: '600', fontSize: 14 },
+  actionTextDelete: { color: colores.rojoPrimario, fontWeight: 'bold', fontSize: 14 },
+  
+  // Estilos de la zona desplegable
+  estudiantesContainer: {
+    backgroundColor: colores.fondoEstudiantes,
+    padding: 15,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0d9d9'
   },
-  cardActions: {
-    justifyContent: 'space-between',
-    gap: 10,
+  estudianteItem: {
+    marginBottom: 8,
   },
-  actionButton: {
-    padding: 5,
-  },
-  actionTextEdit: { 
-    color: colores.textoGris, 
+  estudianteNombre: {
+    fontSize: 14,
     fontWeight: '600',
-    fontSize: 14,
+    color: colores.textoOscuro,
   },
-  actionTextDelete: { 
-    color: colores.rojoPrimario, 
-    fontWeight: 'bold',
+  estudianteEmail: {
+    fontSize: 13,
+    color: colores.textoGris,
+    marginLeft: 10,
+  },
+  sinEstudiantes: {
     fontSize: 14,
+    color: colores.textoGris,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 10,
   }
 });
