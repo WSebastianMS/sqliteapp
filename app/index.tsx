@@ -3,7 +3,7 @@ import { View, Text, TextInput, FlatList, StyleSheet, Alert, TouchableOpacity, S
 import { Link } from 'expo-router';
 import { db, initDB } from '../database';
 
-// Añadimos el tipo Estudiante para poder leerlos de la BD
+
 type Programa = { codigo: string; nombre: string };
 type Estudiante = { codigo: string; nombre: string; email: string; programa_cod: string };
 
@@ -14,7 +14,7 @@ export default function ProgramasScreen() {
   const [busqueda, setBusqueda] = useState('');
   const [editando, setEditando] = useState(false);
 
-  // Nuevos estados para la funcionalidad de expandir estudiantes
+
   const [programaExpandido, setProgramaExpandido] = useState<string | null>(null);
   const [estudiantesDelPrograma, setEstudiantesDelPrograma] = useState<Estudiante[]>([]);
 
@@ -36,7 +36,7 @@ export default function ProgramasScreen() {
     setProgramas(result);
   };
 
-  // Función que se ejecuta al tocar un programa
+
   const toggleExpandir = (codigoPrograma: string) => {
     if (programaExpandido === codigoPrograma) {
       // Si tocamos el que ya está abierto, lo cerramos
@@ -208,7 +208,7 @@ const colores = {
   bordeGris: '#DCDCDC',
   blanco: '#FFFFFF',
   azulInput: '#F0F4F8',
-  fondoEstudiantes: '#F9ECEC' // Un fondito rojizo/rosado muy sutil para la sub-lista
+  fondoEstudiantes: '#F9ECEC'
 };
 
 const styles = StyleSheet.create({
